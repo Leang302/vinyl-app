@@ -1,0 +1,15 @@
+# Verification — 13 November 2026
+
+- `npm test`: 52 tests passing. Parser, playlist extraction, transition timing, smooth/linear/equal-power curves, master volume, short/invalid/live durations, pause/buffering, skips, cancellation, end waiting, IndexedDB settings and file blobs, mocked official-player navigation, unavailable videos, autoplay recovery, mount cancellation, pre-ready failures, late events, and repeat-one.
+- `npm run build`: TypeScript passes and Vite builds production output. The Three.js renderer chunk is approximately 356 KB gzipped and triggers Vite’s default 500 KB uncompressed chunk warning; the scene is loaded through a separate module.
+- Dependency installation after upgrading Vitest to 5.1: zero vulnerabilities reported by npm.
+- Desktop Chrome 1440×1000: actual 3D canvas rendered, no fallback, no horizontal overflow, no JavaScript page errors. Reviewed screenshot and enlarged scene; corrected desktop viewport containment and slider thumb accessible names.
+- Mobile Chrome viewport 390×844: no horizontal overflow; reviewed full-page screenshot, touch-oriented turntable, compact transport, settings, and opening/closing collection drawer.
+- Actual browser local audio: media position advances; pause freezes position; analyser returns measured nonzero audio. Both decks overlap during a crossfade, pause together, resume and advance to the incoming track at approximately 3 seconds. Imported a real WAV into IndexedDB, played it, refreshed, and successfully replayed the stored file. No JavaScript page errors.
+- Persistence in browser: master volume and favorite survive a refresh. Invalid non-YouTube link gives inline validation.
+- Real official YouTube video: `M7lc1UVf-VE` played and supplied the title “YouTube Developers Live: Embedded Web Player Customization.” The unobstructed embed measured 233×218 pixels in the desktop viewport, retaining native controls. Switching to local mode removed the YouTube iframe. No JavaScript page errors. One timed-text request was aborted by YouTube; playback succeeded.
+- Real playlist: Google’s documented example `PLC77007E23FF423C6` played “Google I/O 2011: Enterprise Workflow with Apps Script” and paused correctly. It currently exposes one available video; it cannot demonstrate multi-track navigation. A populated 158-video playlist (`PL-osiE80TeTt2d9bfVyTiXJA-UTHn6WwU`) subsequently loaded, played its first video, advanced to the second video through Next, and paused with the correct index and title. No JavaScript page errors.
+
+- Real YouTube transition: seeking near the end of the official demo video produced a fade through `setVolume`; pausing held the reduced volume; disabling transitions restored the saved master volume of 70.
+
+Remaining limits: headless Chrome checks do not replace listening by a person, and do not establish frame rate on every device. YouTube ads, owner restrictions, live duration behavior, autoplay restrictions across browsers, and loading gaps remain controlled by YouTube/browser policy. No live Safari or physical touch-device test was run. Vocal/instrument separation is intentionally a labeled future feature.

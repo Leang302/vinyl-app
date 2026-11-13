@@ -1,0 +1,18 @@
+import { chromium } from '@playwright/test';
+const browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
+const page=await browser.newPage({viewport:{width:1440,height:1000},deviceScaleFactor:1});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.log('CONSOLE',m.text());});
+const response=await page.goto('http://127.0.0.1:5173/');console.log('HTTP',response.status());
+await page.waitForTimeout(2500);await page.screenshot({path:'qa/desktop.png',fullPage:true});
+console.log('scene',await page.locator('canvas').count(),'fallback',await page.getByText('3D is unavailable').count(),'overflow',await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
+await page.getByRole('button',{name:'Play',exact:true}).click();await page.waitForTimeout(1800);
+console.log('playing',await page.getByRole('button',{name:'Pause',exact:true}).count(),await page.getByRole('slider',{name:'Playback position',exact:true}).getAttribute('aria-valuenow'));
+await page.getByRole('button',{name:'Pause',exact:true}).click();const paused=await page.getByRole('slider',{name:'Playback position',exact:true}).getAttribute('aria-valuenow');await page.waitForTimeout(600);console.log('paused',paused===await page.getByRole('slider',{name:'Playback position',exact:true}).getAttribute('aria-valuenow'));
+await page.getByRole('button',{name:'Save track to favorites',exact:true}).click();
+await page.getByRole('slider',{name:'Master volume'}).focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');
+console.log('volume',await page.getByRole('slider',{name:'Master volume'}).getAttribute('aria-valuenow'));
+await page.reload();await page.waitForTimeout(1500);console.log('persisted-volume',await page.getByRole('slider',{name:'Master volume'}).getAttribute('aria-valuenow'),'favorite',await page.getByRole('button',{name:'Save track to favorites'}).getAttribute('aria-pressed'));
+await page.getByRole('button',{name:'Add music',exact:true}).click();await page.getByLabel('Video or playlist URL').fill('https://example.com/not-youtube');await page.getByRole('button',{name:'Add to my collection'}).click();console.log('validation',await page.getByText('This link is not from YouTube.',{exact:false}).count());await page.getByRole('button',{name:'Close dialog'}).click();
+await page.setViewportSize({width:390,height:844});await page.waitForTimeout(1000);await page.screenshot({path:'qa/mobile.png',fullPage:true});console.log('mobile-overflow',await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
+await page.getByRole('button',{name:'Open collection',exact:true}).click();console.log('mobile-library',await page.getByRole('button',{name:'Close collection',exact:true}).isVisible());await page.getByRole('button',{name:'Close collection',exact:true}).click();
+console.log('PAGE_ERRORS',JSON.stringify(errors));await browser.close();
