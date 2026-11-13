@@ -1,4 +1,4 @@
-export interface YouTubeSource { videoId?: string; playlistId?: string; index: number; startSeconds: number }
+export interface YouTubeSource { videoId?: string; playlistId?: string; index: number; startSeconds: number; radioMix?: boolean }
 export function parseYouTubeUrl(input: string): YouTubeSource {
   let url: URL;
   try { url = new URL(input.trim()); } catch { throw new Error('Paste a complete YouTube video or playlist URL.'); }
@@ -18,5 +18,10 @@ export function parseYouTubeUrl(input: string): YouTubeSource {
   const match = rawTime.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
   const startSeconds = /^\d+$/.test(rawTime) ? Number(rawTime) : match ? Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0) : 0;
   const index = Math.max(0, (Number(url.searchParams.get('index')) || 1) - 1);
+  if (playlistId?.startsWith('RD')) {
+    const seed = videoId || (/^RD([a-zA-Z0-9_-]{11})$/.exec(playlistId)?.[1]);
+    if (!seed) throw new Error('This generated radio mix needs a video link. Open the mix on YouTube and copy a link containing a video, or use a saved playlist.');
+    return { videoId: seed, playlistId: undefined, index: 0, startSeconds, radioMix: true };
+  }
   return { videoId, playlistId, index, startSeconds };
 }

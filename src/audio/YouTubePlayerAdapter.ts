@@ -25,6 +25,7 @@ export class YouTubePlayerAdapter implements PlaybackAdapter {
   private loadTimeout?:number;
   private rejectMount?:(message?:string)=>void;
   private status: Snapshot['state']='idle';
+  private playbackError?:string;
   private previousTime=0;
   private repeatOne=false;
   private repeatAll=false;
@@ -38,19 +39,22 @@ export class YouTubePlayerAdapter implements PlaybackAdapter {
       this.player=new window.YT.Player(element,{width:'100%',height:'100%',playerVars:{playsinline:1,controls:1,origin:window.location.origin,rel:0},events:{
         onReady:()=>{clearTimeout(timeout);this.readyTimeout=undefined;this.rejectMount=undefined; if(this.destroyed){this.player?.destroy();return;} this.player?.setVolume(this.settings().volume); resolve();},
         onStateChange:event=>this.onState(event.data),
-        onError:event=>{if(this.destroyed)return;if(this.loadTimeout)clearTimeout(this.loadTimeout);this.loadTimeout=undefined;clearTimeout(timeout);this.readyTimeout=undefined;this.rejectMount?.(errors[event.data]||'YouTube cannot play this video.');this.rejectMount=undefined;this.status='error';this.stopPolling();this.emit(errors[event.data]||'YouTube cannot play this video. Choose another track.');},
-        onAutoplayBlocked:()=>{if(this.destroyed)return;if(this.loadTimeout)clearTimeout(this.loadTimeout);this.loadTimeout=undefined;this.status='paused';this.stopPolling();this.emit('Your browser paused autoplay. Press Play in the visible YouTube player to continue.');},
+        onError:event=>{if(this.destroyed)return;if(this.loadTimeout)clearTimeout(this.loadTimeout);this.loadTimeout=undefined;clearTimeout(timeout);this.readyTimeout=undefined;this.rejectMount?.(errors[event.data]||'YouTube cannot play this video.');this.rejectMount=undefined;this.status='error';this.playbackError=errors[event.data]||'YouTube cannot play this video. Choose another track.';this.stopPolling();this.emit(this.playbackError);},
+        onAutoplayBlocked:()=>{if(this.destroyed||this.playbackError)return;if(this.loadTimeout)clearTimeout(this.loadTimeout);this.loadTimeout=undefined;this.status='paused';this.stopPolling();this.emit('Your browser paused autoplay. Press Play in the visible YouTube player to continue.');},
       }});
     });
   }
   load(source: YouTubeSource) {
-    this.transition.manualSkip();this.status='loading';this.emit();
-    if(this.loadTimeout)clearTimeout(this.loadTimeout);this.loadTimeout=window.setTimeout(()=>{if(this.destroyed)return;this.status='error';this.stopPolling();this.emit('This YouTube source did not start. The playlist may be private, unavailable, or restricted. Try another link or press Play to retry.');},20000);
+    this.playbackError=undefined;this.stopPolling();this.transition.manualSkip();this.status='loading';this.emit();
+    if(this.loadTimeout)clearTimeout(this.loadTimeout);this.loadTimeout=window.setTimeout(()=>{if(this.destroyed)return;this.status='error';this.playbackError='YouTube did not start playback. Try its visible Play button, open the source on YouTube, or choose another link.';this.stopPolling();this.emit(this.playbackError);},20000);
     if(source.playlistId) this.player?.loadPlaylist({list:source.playlistId,listType:'playlist',index:source.index,startSeconds:source.startSeconds});
     else if(source.videoId) this.player?.loadVideoById({videoId:source.videoId,startSeconds:source.startSeconds});
   }
   private onState(state: number) {
     if(this.destroyed)return;
+    // YouTube can send UNSTARTED/CUED after a fatal embed error. Keep that error stable.
+    if(this.playbackError && state!==1)return;
+    if(state===1)this.playbackError=undefined;
     if([0,1,2,5].includes(state)&&this.loadTimeout){clearTimeout(this.loadTimeout);this.loadTimeout=undefined;}
     const map:Record<number,Snapshot['state']>={[-1]:'loading',0:'ended',1:'playing',2:'paused',3:'buffering',5:'paused'};
     this.status=map[state]||'idle';
@@ -70,16 +74,16 @@ export class YouTubePlayerAdapter implements PlaybackAdapter {
   private emit(error?:string){
     const p=this.player;if(!p||this.destroyed)return;
     const data=p.getVideoData?.() as {video_id?:string;title?:string;author?:string;isLive?:boolean}|undefined;
-    this.listener({state:this.status,position:p.getCurrentTime?.()||0,duration:p.getDuration?.()||0,trackId:data?.video_id||'',title:data?.title,artist:data?.author,playlist:p.getPlaylist?.()||[],playlistIndex:p.getPlaylistIndex?.()||0,live:data?.isLive,error});
+    this.listener({state:this.status,position:p.getCurrentTime?.()||0,duration:p.getDuration?.()||0,trackId:data?.video_id||'',title:data?.title,artist:data?.author,playlist:p.getPlaylist?.()||[],playlistIndex:p.getPlaylistIndex?.()||0,live:data?.isLive,error:error||this.playbackError});
   }
   async play(){this.player?.playVideo();}
   pause(){this.player?.pauseVideo();}
   seek(time:number){this.transition.cancel();this.player?.setVolume(this.settings().volume);this.player?.seekTo(time,true);this.tick();}
   setVolume(volume:number){this.player?.setVolume(volume*this.transition.factor);}
   refreshSettings(){if(!this.settings().transitions)this.transition.cancel();this.setVolume(this.settings().volume);}
-  next(){this.transition.manualSkip();this.player?.nextVideo();}
-  previous(){this.transition.manualSkip();this.player?.previousVideo();}
-  playAt(index:number){this.transition.manualSkip();this.player?.playVideoAt(index);}
+  next(){this.playbackError=undefined;this.transition.manualSkip();this.player?.nextVideo();}
+  previous(){this.playbackError=undefined;this.transition.manualSkip();this.player?.previousVideo();}
+  playAt(index:number){this.playbackError=undefined;this.transition.manualSkip();this.player?.playVideoAt(index);}
   setShuffle(value:boolean){this.player?.setShuffle(value);this.emit();}
   setRepeat(value:'off'|'all'|'one'){this.repeatOne=value==='one';this.repeatAll=value==='all';this.player?.setLoop(value==='all');}
   dispose(){this.destroyed=true;if(this.loadTimeout)clearTimeout(this.loadTimeout);this.loadTimeout=undefined;if(this.readyTimeout)clearTimeout(this.readyTimeout);this.readyTimeout=undefined;this.rejectMount?.();this.rejectMount=undefined;this.stopPolling();this.transition.cancel();this.player?.destroy();}

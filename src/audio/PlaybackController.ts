@@ -27,7 +27,7 @@ export class PlaybackController {
   private ytSnapshot(snapshot:Snapshot){
     if(state().mode!=='youtube')return;
     const s=state();const patch:Parameters<typeof s.patch>[0]={state:snapshot.state,position:snapshot.position,duration:snapshot.duration,phase:this.youtube?.transition.phase||'idle'};
-    if(snapshot.error)patch.error=snapshot.error;
+    if(snapshot.error)patch.error=snapshot.error;else if(snapshot.state==='playing')patch.error=null;
     const ids=snapshot.playlist?.length?snapshot.playlist:snapshot.trackId?[snapshot.trackId]:[];
     if(ids.length){
       patch.queue=ids.map((id,index)=>{
@@ -60,14 +60,14 @@ export class PlaybackController {
     }
     this.loadGeneration++;this.youtube?.dispose();this.youtube=undefined;this.youtubeMount=undefined;
     const host=document.getElementById('youtube-host');host?.replaceChildren();
-    state().patch({mode:'local',track,index:Math.max(0,state().queue.findIndex(t=>t.id===track.id)),position:0,duration:0});
+    state().patch({mode:'local',sourceNotice:null,youtubeUrl:null,track,index:Math.max(0,state().queue.findIndex(t=>t.id===track.id)),position:0,duration:0});
     this.currentLocalId=track.id;state().markRecent(track.id);await this.local.load(track);
   }
   async loadYouTube(url:string,collection?:Collection){
     let generation=0;
     try{
       const source=parseYouTubeUrl(url);generation=++this.loadGeneration;this.local.deactivate();
-      state().patch({mode:'youtube',state:'loading',error:null,position:0,duration:0,track:collection?.tracks[0]||null,queue:collection?.tracks||[],index:0});this.activeCollection=collection;
+      state().patch({mode:'youtube',state:'loading',error:null,youtubeUrl:url,sourceNotice:source.radioMix?'This is a generated YouTube radio mix. VINYL opens its seed video; the full radio mix is available on YouTube.':null,position:0,duration:0,track:collection?.tracks[0]||null,queue:collection?.tracks||[],index:0});this.activeCollection=collection;
       if(!this.youtube){
         const host=document.getElementById('youtube-host');if(!host)throw new Error('The YouTube player could not be opened.');
         host.replaceChildren();const node=document.createElement('div');host.appendChild(node);
@@ -82,7 +82,7 @@ export class PlaybackController {
   async next(){if(state().mode==='youtube'){this.youtube?.next();return;}const next=this.peekNext();if(next)await this.selectTrack(next);else {this.local.pause();this.local.seek(0);}}
   async previous(){if(state().position>3){this.seek(0);return;}if(state().mode==='youtube'){this.youtube?.previous();return;}const s=state();const index=s.index>0?s.index-1:s.repeat==='all'?s.queue.length-1:0;const track=s.queue[index];if(track)await this.selectTrack(track);}
   seek(time:number){if(state().mode==='youtube')this.youtube?.seek(time);else this.local.seek(time);}
-  clear(){this.loadGeneration++;this.local.deactivate();this.youtube?.dispose();this.youtube=undefined;this.youtubeMount=undefined;this.currentLocalId='';this.activeCollection=undefined;state().patch({track:null,queue:[],index:0,state:'idle',position:0,duration:0,phase:'idle'});}
+  clear(){this.loadGeneration++;this.local.deactivate();this.youtube?.dispose();this.youtube=undefined;this.youtubeMount=undefined;this.currentLocalId='';this.activeCollection=undefined;state().patch({sourceNotice:null,youtubeUrl:null,track:null,queue:[],index:0,state:'idle',position:0,duration:0,phase:'idle'});}
   dispose(){this.unsubscribe?.();this.youtube?.dispose();this.local.dispose();}
 }
 export const playback=new PlaybackController();

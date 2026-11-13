@@ -13,3 +13,11 @@
 - Real YouTube transition: seeking near the end of the official demo video produced a fade through `setVolume`; pausing held the reduced volume; disabling transitions restored the saved master volume of 70.
 
 Remaining limits: headless Chrome checks do not replace listening by a person, and do not establish frame rate on every device. YouTube ads, owner restrictions, live duration behavior, autoplay restrictions across browsers, and loading gaps remain controlled by YouTube/browser policy. No live Safari or physical touch-device test was run. Vocal/instrument separation is intentionally a labeled future feature.
+
+## Radio links and restricted videos
+
+Regression report: `https://www.youtube.com/watch?v=pMuyCwMkXAU&list=RDpMuyCwMkXAU&start_radio=1` timed out. Browser reproduction of the clean single-video URL returned YouTube error 150/101 (owner does not allow embedding). Later UNSTARTED/CUED events previously replaced the error state with loading.
+
+Fix: generated RD radio links resolve to their seed video, with an explanation in the import dialog and beside the visible player. Normal saved playlist links continue to use playlist loading. The original YouTube URL stays available in an Open on YouTube link even if playback never supplies metadata. Fatal embed errors remain visible through late unstarted/cued events, clear on a fresh source or actual playback, and stop polling. Generic timeouts no longer assert that the playlist is private.
+
+`npm test`: 59 tests pass. Added regressions for the exact URL, YouTube Music radio links, extracting a seed from a simple RD link, missing-seed recovery, choosing the video API, preserving embed errors, and recovery on a subsequent playing event. Production build passes. Browser verification of both the full reported URL and clean single URL now reaches a stable error with the real embedding restriction and no page errors.

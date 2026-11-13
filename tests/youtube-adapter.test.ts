@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { YouTubePlayerAdapter } from '../src/audio/YouTubePlayerAdapter';
+import { parseYouTubeUrl } from '../src/lib/youtube';
 import { defaultSettings } from '../src/audio/types';
 let autoReady=true;
 let handlers:Record<string,(e:any)=>void>; // Mock boundary: YouTube's event payload is supplied by the external API.
@@ -20,5 +21,9 @@ describe('official YouTube player adapter',()=>{
 
  it('reports a playlist that never starts and cleans up its load deadline',async()=>{const listener=vi.fn();const a=new YouTubePlayerAdapter(listener,()=>defaultSettings);await a.mount({} as HTMLElement);a.load({playlistId:'PLunavailable12',index:0,startSeconds:0});await vi.advanceTimersByTimeAsync(20000);expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({state:'error',error:expect.stringContaining('did not start')}));a.dispose();expect(vi.getTimerCount()).toBe(0);});
  it('cancels the load deadline when autoplay is blocked',async()=>{const a=new YouTubePlayerAdapter(vi.fn(),()=>defaultSettings);await a.mount({} as HTMLElement);a.load({videoId:'aaaaaaaaaaa',index:0,startSeconds:0});handlers.onAutoplayBlocked({});expect(vi.getTimerCount()).toBe(0);a.dispose();});
+
+ it('loads the radio seed through the single-video API',async()=>{const a=new YouTubePlayerAdapter(vi.fn(),()=>defaultSettings);await a.mount({} as HTMLElement);a.load(parseYouTubeUrl('https://youtube.com/watch?v=pMuyCwMkXAU&list=RDpMuyCwMkXAU&start_radio=1'));expect(methods.loadVideoById).toHaveBeenCalledWith({videoId:'pMuyCwMkXAU',startSeconds:0});expect(methods.loadPlaylist).not.toHaveBeenCalled();a.dispose();});
+ it('keeps an embed restriction visible through late unstarted and cued events',async()=>{const listener=vi.fn();const a=new YouTubePlayerAdapter(listener,()=>defaultSettings);await a.mount({} as HTMLElement);handlers.onError({data:150});handlers.onStateChange({data:-1});handlers.onStateChange({data:5});a.setRepeat('off');expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({state:'error',error:expect.stringContaining('does not allow')}));expect(vi.getTimerCount()).toBe(0);a.dispose();});
+ it('clears the fatal error when a new video actually plays',async()=>{const listener=vi.fn();const a=new YouTubePlayerAdapter(listener,()=>defaultSettings);await a.mount({} as HTMLElement);handlers.onError({data:150});a.load({videoId:'bbbbbbbbbbb',index:0,startSeconds:0});handlers.onStateChange({data:1});expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({state:'playing',error:undefined}));a.dispose();});
 
 });
