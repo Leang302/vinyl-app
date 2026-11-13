@@ -1,46 +1,86 @@
-import { useRef, useState } from 'react';
-import * as Tabs from '@radix-ui/react-tabs';
-import { ArrowUpRight, AudioLines, ChevronDown, Disc3, SlidersHorizontal, Sparkles, Upload, Waves } from 'lucide-react';
+import { useRef } from 'react';
+import { Upload } from 'lucide-react';
 import { usePlayer } from '../state/store';
 import { Slider, Switch, Dialog } from './ui/controls';
-import { playback } from '../audio/PlaybackController';
-export function TransitionSettings(){const s=usePlayer(x=>x.settings);const set=usePlayer(x=>x.setSettings);const mode=usePlayer(x=>x.mode);return <div className="transition-settings">
- <div className="setting-heading"><span><Waves size={16}/> Smooth transitions</span><Switch aria-label="Enable smooth transitions" checked={s.transitions} onCheckedChange={transitions=>set({transitions})}/></div>
- <p className="setting-description">{mode==='youtube'?'A gentle fade between tracks.':'Let one moment flow into the next.'}</p>
- <div className={!s.transitions?'disabled-settings':''}>
- <label className="slider-label"><span>{mode==='local'?'Crossfade':'Fade out'}</span><span>{s.fadeOut}s</span></label><Slider aria-label={mode==='local'?'Local crossfade duration':'Fade-out duration'} min={1} max={10} step={1} value={[s.fadeOut]} disabled={!s.transitions} onValueChange={([fadeOut])=>set({fadeOut})}/>
- {mode==='youtube'&&<><label className="slider-label"><span>Fade in</span><span>{s.fadeIn}s</span></label><Slider aria-label="Fade-in duration" min={1} max={10} step={1} value={[s.fadeIn]} disabled={!s.transitions} onValueChange={([fadeIn])=>set({fadeIn})}/></>}
- <label className="select-label">Curve<select aria-label="Transition easing" disabled={!s.transitions||mode==='local'} value={mode==='local'?'equal-power':s.easing} onChange={e=>set({easing:e.target.value as 'smooth'|'linear'})}>{mode==='local'?<option value="equal-power">Equal power</option>:<><option value="smooth">Smooth</option><option value="linear">Linear</option></>}</select></label>
- </div><p className="capability-note">{mode==='youtube'?'Sequential fades · YouTube may have a loading gap.':'True overlapping crossfade · Local audio only.'}</p>
- </div>;}
-function Equalizer(){const s=usePlayer(x=>x.settings);const set=usePlayer(x=>x.setSettings);const local=usePlayer(x=>x.mode==='local');return <div className="equalizer">
- <div className="setting-heading"><span><SlidersHorizontal size={15}/> Shape your sound</span><button className="text-button" disabled={!local} onClick={()=>set({bass:0,mid:0,treble:0,balance:0})}>Reset</button></div>
- {!local&&<p className="capability-note">EQ is available for local audio. YouTube does not expose audio for processing.</p>}
- {(['bass','mid','treble'] as const).map((key,i)=><div className="eq-control" key={key}><label className="slider-label"><span>{['Bass','Midrange','Treble'][i]} <small>{['180 Hz','1.1 kHz','4.5 kHz'][i]}</small></span><span>{s[key]>0?'+':''}{s[key]} dB</span></label><Slider aria-label={`${key} EQ`} min={-12} max={12} step={1} value={[s[key]]} disabled={!local} onValueChange={([value])=>set({[key]:value})}/></div>)}
- <label className="slider-label"><span>Stereo balance</span><span>{s.balance===0?'Center':s.balance<0?'Left':'Right'}</span></label><Slider aria-label="Stereo balance" min={-1} max={1} step={.05} value={[s.balance]} disabled={!local} onValueChange={([balance])=>set({balance})}/>
- <div className="setting-heading crackle-setting"><span>Vinyl texture</span><Switch aria-label="Vinyl crackle" checked={s.crackle} disabled={!local} onCheckedChange={crackle=>set({crackle})}/></div><p className="setting-description">A little analog warmth. Crackle, optional.</p>
- <p className="future-note"><Sparkles size={13}/> Vocal & instrument separation is planned as a separate future feature.</p>
- </div>;}
-function Spectrum(){const mode=usePlayer(s=>s.mode);const status=usePlayer(s=>s.state);const bars=useRef<HTMLDivElement>(null);
- // Measured spectrum only. YouTube receives a static playback indicator.
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { RECORD_COLORS } from '../lib/palette';
 
- return <SpectrumCanvas bars={bars} local={mode==='local'} playing={status==='playing'}/>;
+export type SettingsTab = 'sound' | 'transitions' | 'turntable';
+
+/** Sound, transitions and turntable look, behind the header's overflow menu. */
+export function SettingsDialog({ tab, onTabChange, open, onOpenChange }: { tab: SettingsTab; onTabChange: (tab: SettingsTab) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
+  return <Dialog open={open} onOpenChange={onOpenChange} title="Settings">
+    <Tabs value={tab} onValueChange={v => onTabChange(v as SettingsTab)}>
+      <TabsList aria-label="Settings sections">
+        <TabsTrigger value="sound">Sound</TabsTrigger>
+        <TabsTrigger value="transitions">Transitions</TabsTrigger>
+        <TabsTrigger value="turntable">Turntable</TabsTrigger>
+      </TabsList>
+      <TabsContent value="sound"><Equalizer /></TabsContent>
+      <TabsContent value="transitions"><TransitionSettings /></TabsContent>
+      <TabsContent value="turntable"><AppearanceSettings /></TabsContent>
+    </Tabs>
+  </Dialog>;
 }
-import { useEffect, type RefObject } from 'react';
-function SpectrumCanvas({bars,local,playing}:{bars:RefObject<HTMLDivElement|null>;local:boolean;playing:boolean}){
- useEffect(()=>{if(!local||!playing)return;let frame=0;let previous=0;const update=(time:number)=>{if(time-previous>45){const data=playback.local.getSpectrum();bars.current?.querySelectorAll<HTMLElement>('i').forEach((bar,i)=>{const value=data[i+2]||0;bar.style.height=`${Math.max(3,value/255*36)}px`;});previous=time;}frame=requestAnimationFrame(update);};frame=requestAnimationFrame(update);return()=>cancelAnimationFrame(frame);},[bars,local,playing]);
- return <div className="spectrum-box"><div ref={bars} className={`spectrum ${playing&&local?'measured':''}`}>{Array.from({length:32},(_,i)=><i key={i} style={{height:local&&playing?3:3}}/>)}</div><span>{local?'LIVE AUDIO SPECTRUM':playing?'YOUTUBE · PLAYING':'YOUTUBE · READY'}</span></div>;
+
+function Field({ label, value, children }: { label: string; value?: string; children: React.ReactNode }) {
+  return <div className="field"><div className="field-label"><span>{label}</span>{value && <span className="field-value">{value}</span>}</div>{children}</div>;
 }
-export function SettingsPanel({onAdd}:{onAdd:()=>void}){const mode=usePlayer(x=>x.mode);const track=usePlayer(x=>x.track);const sourceNotice=usePlayer(x=>x.sourceNotice);const youtubeUrl=usePlayer(x=>x.youtubeUrl);const playerState=usePlayer(x=>x.state);const error=usePlayer(x=>x.error);const [open,setOpen]=useState(false);return <aside className="listening-panel">
- <div className="panel-heading"><span className="eyebrow">THE LISTENING DESK</span><SlidersHorizontal size={14}/></div>
- <div className="source-selector"><button className={mode==='local'?'active':''} onClick={()=>{if(mode!=='local'){const local=usePlayer.getState().collections.find(c=>!c.youtubeUrl&&c.tracks.length>0);if(local)void playback.selectCollection(local);else onAdd();}}}><AudioLines size={14}/> Local audio</button><button className={mode==='youtube'?'active':''} onClick={onAdd}><span className="youtube-glyph">▶</span> YouTube</button></div>
- <div className="source-player" data-mode={mode}><div id="youtube-host" className={mode==='youtube'?'youtube-host':'youtube-host inactive'}/>{mode==='local'&&<div className="album-card"><img src={track?.artwork||'/artwork/morning.svg'} alt={track?.title?`Artwork for ${track.title}`:'VINYL Sessions artwork'}/><span className="album-card-tag"><Disc3 size={12}/> VINYL SESSIONS</span></div>}</div>
- {mode==='youtube'&&<a className="external-source" href={youtubeUrl||`https://www.youtube.com/watch?v=${track?.videoId||''}`} target="_blank" rel="noreferrer">Open on YouTube <ArrowUpRight size={12}/></a>}
- {mode==='youtube'&&sourceNotice&&<p className="source-notice" role="status">{sourceNotice}</p>}
- {mode==='youtube'&&playerState==='error'&&error&&<p className="source-error" role="alert">{error}</p>}
- <Spectrum/>
- <Tabs.Root defaultValue="transitions" className="desk-tabs"><Tabs.List className="desk-tab-list" aria-label="Listening settings"><Tabs.Trigger value="transitions">Transitions</Tabs.Trigger><Tabs.Trigger value="sound">Sound & EQ</Tabs.Trigger></Tabs.List><Tabs.Content value="transitions"><TransitionSettings/></Tabs.Content><Tabs.Content value="sound"><Equalizer/></Tabs.Content></Tabs.Root>
- <button className="equipment-settings" onClick={()=>setOpen(true)}>Make it yours <ChevronDown size={14}/></button>
- <Dialog open={open} onOpenChange={setOpen} title="Your turntable. Your way." description="Fine-tune the details of your listening room."><AppearanceSettings/></Dialog>
- </aside>;}
-export function AppearanceSettings(){const s=usePlayer(x=>x.settings);const set=usePlayer(x=>x.setSettings);const input=useRef<HTMLInputElement>(null);return <div className="appearance-settings"><div className="slider-label"><span>Record color</span><span>{s.vinylColor==='#131516'?'Classic black':'Custom pressing'}</span></div><div className="color-swatches">{['#131516','#354d3e','#753c31','#a6946f','#3b4f68'].map(color=><button key={color} style={{background:color}} className={s.vinylColor===color?'selected':''} aria-label={`Record color ${color}`} aria-pressed={s.vinylColor===color} onClick={()=>set({vinylColor:color})}/>)}</div><label className="select-label">Record speed<select value={s.rpm} onChange={e=>set({rpm:Number(e.target.value) as 33|45})}><option value={33}>33⅓ RPM</option><option value={45}>45 RPM</option></select></label><p className="capability-note">Changes platter rotation. Music stays at its original speed.</p><label className="select-label">3D quality<select value={s.quality} onChange={e=>set({quality:e.target.value as typeof s.quality})}><option value="auto">Adaptive</option><option value="high">High</option><option value="low">Low power</option></select></label><div className="setting-heading"><span>Center-label artwork</span>{s.artwork&&<button className="text-button" onClick={()=>set({artwork:undefined})}>Reset</button>}</div><button className="secondary-button" onClick={()=>input.current?.click()}><Upload size={16}/> Choose artwork</button><input hidden type="file" ref={input} accept="image/*" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){usePlayer.getState().patch({error:'Choose artwork smaller than 5 MB.'});return;}const reader=new FileReader();reader.onload=()=>{const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=512;const ctx=canvas.getContext('2d')!;const side=Math.min(image.width,image.height);ctx.drawImage(image,(image.width-side)/2,(image.height-side)/2,side,side,0,0,512,512);set({artwork:canvas.toDataURL('image/jpeg',.85)});};image.onerror=()=>usePlayer.getState().patch({error:'This artwork could not be opened. Try a PNG, JPEG, or WebP image.'});image.src=String(reader.result);};reader.readAsDataURL(file);}}/><p className="capability-note">Artwork stays on this device. Drag the volume knob, use the start button, or move the tonearm to interact.</p></div>;}
+
+/** Label + shadcn Select on one row. */
+function SelectField<T extends string>({ id, label, value, onChange, options, disabled }: { id: string; label: string; value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; disabled?: boolean }) {
+  return <div className="select-field">
+    <Label htmlFor={id} className="text-sm font-normal">{label}</Label>
+    <Select value={value} onValueChange={v => onChange(v as T)} disabled={disabled}>
+      <SelectTrigger id={id} className="w-44"><SelectValue /></SelectTrigger>
+      <SelectContent>{options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+    </Select>
+  </div>;
+}
+
+export function TransitionSettings() {
+  const s = usePlayer(x => x.settings); const set = usePlayer(x => x.setSettings); const mode = usePlayer(x => x.mode);
+  return <div className="settings-section">
+    <div className="setting-row"><div><strong>Smooth transitions</strong><p className="hint">{mode === 'youtube' ? 'Fade out, then fade the next video in.' : 'Overlapping equal-power crossfade.'}</p></div><Switch aria-label="Smooth transitions" checked={s.transitions} onCheckedChange={transitions => set({ transitions })} /></div>
+    <Field label={mode === 'local' ? 'Crossfade' : 'Fade out'} value={`${s.fadeOut}s`}><Slider aria-label={mode === 'local' ? 'Crossfade duration' : 'Fade-out duration'} min={1} max={10} step={1} value={[s.fadeOut]} disabled={!s.transitions} onValueChange={([fadeOut]) => set({ fadeOut })} /></Field>
+    {mode === 'youtube' && <>
+      <Field label="Fade in" value={`${s.fadeIn}s`}><Slider aria-label="Fade-in duration" min={1} max={10} step={1} value={[s.fadeIn]} disabled={!s.transitions} onValueChange={([fadeIn]) => set({ fadeIn })} /></Field>
+      <SelectField id="easing" label="Curve" value={s.easing} disabled={!s.transitions} onChange={easing => set({ easing })} options={[{ value: 'smooth', label: 'Smooth' }, { value: 'linear', label: 'Linear' }]} />
+    </>}
+  </div>;
+}
+
+export function Equalizer() {
+  const s = usePlayer(x => x.settings); const set = usePlayer(x => x.setSettings); const local = usePlayer(x => x.mode === 'local');
+  return <div className="settings-section">
+    {!local && <p className="hint">EQ and texture apply to local audio. YouTube audio can't be processed.</p>}
+    {(['bass', 'mid', 'treble'] as const).map((key, i) => <Field key={key} label={['Bass', 'Mid', 'Treble'][i]} value={`${s[key] > 0 ? '+' : ''}${s[key]} dB`}><Slider aria-label={`${key} EQ`} min={-12} max={12} step={1} value={[s[key]]} disabled={!local} onValueChange={([value]) => set({ [key]: value })} /></Field>)}
+    <Field label="Balance" value={s.balance === 0 ? 'Center' : s.balance < 0 ? 'Left' : 'Right'}><Slider aria-label="Stereo balance" min={-1} max={1} step={.05} value={[s.balance]} disabled={!local} onValueChange={([balance]) => set({ balance })} /></Field>
+    <div className="setting-row"><div><strong>Vinyl crackle</strong><p className="hint">A little analog texture.</p></div><Switch aria-label="Vinyl crackle" checked={s.crackle} disabled={!local} onCheckedChange={crackle => set({ crackle })} /></div>
+    <div><Button variant="outline" size="sm" disabled={!local} onClick={() => set({ bass: 0, mid: 0, treble: 0, balance: 0 })}>Reset EQ</Button></div>
+  </div>;
+}
+
+export function AppearanceSettings() {
+  const s = usePlayer(x => x.settings); const set = usePlayer(x => x.setSettings); const input = useRef<HTMLInputElement>(null);
+  const notify = usePlayer(x => x.notify);
+  return <div className="settings-section">
+    <Field label="Record color" value={RECORD_COLORS.find(c => c.value === s.vinylColor)?.label || 'Custom'}>
+      <div className="swatches">{RECORD_COLORS.map(c => <button type="button" key={c.value} style={{ background: c.value }} aria-label={c.label} title={c.label} aria-pressed={s.vinylColor === c.value} onClick={() => set({ vinylColor: c.value })} />)}</div>
+    </Field>
+    <SelectField id="rpm" label="Platter speed" value={String(s.rpm) as '33' | '45'} onChange={v => set({ rpm: Number(v) as 33 | 45 })} options={[{ value: '33', label: '33⅓ RPM' }, { value: '45', label: '45 RPM' }]} />
+    <SelectField id="quality" label="3D quality" value={s.quality} onChange={quality => set({ quality })} options={[{ value: 'auto', label: 'Adaptive' }, { value: 'high', label: 'High' }, { value: 'low', label: 'Low power' }]} />
+    <div className="setting-row"><div><strong>Center label</strong><p className="hint">Your own artwork, kept on this device.</p></div>
+      <div className="row-actions">{s.artwork && <Button variant="outline" size="sm" onClick={() => set({ artwork: undefined })}>Reset</Button>}<Button variant="outline" onClick={() => input.current?.click()}><Upload size={16} />Choose</Button></div></div>
+    <input hidden type="file" ref={input} accept="image/*" onChange={e => {
+      const file = e.target.files?.[0]; if (!file) return;
+      if (file.size > 5 * 1024 * 1024) { notify('Choose artwork smaller than 5 MB.'); return; }
+      const reader = new FileReader();
+      reader.onload = () => { const image = new Image(); image.onload = () => { const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512; const ctx = canvas.getContext('2d')!; const side = Math.min(image.width, image.height); ctx.drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, 512, 512); set({ artwork: canvas.toDataURL('image/jpeg', .85) }); }; image.onerror = () => notify('This artwork could not be opened. Try PNG, JPEG or WebP.'); image.src = String(reader.result); };
+      reader.readAsDataURL(file);
+    }} />
+  </div>;
+}

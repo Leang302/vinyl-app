@@ -1,0 +1,26 @@
+// Real-network check of the app-owned YouTube queue (keyless mode). Usage: node qa/queue-journey.mjs [baseUrl]
+import { chromium } from '@playwright/test';
+const base=process.argv[2]||'http://127.0.0.1:5173/';
+const browser=await chromium.launch({args:['--autoplay-policy=no-user-gesture-required','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const page=await browser.newPage({viewport:{width:1440,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto(base);await page.waitForTimeout(1500);
+await page.getByRole('radio',{name:'YouTube'}).click();
+await page.getByRole('textbox',{name:/YouTube link/}).fill('https://www.youtube.com/playlist?list=PL-osiE80TeTt2d9bfVyTiXJA-UTHn6WwU');
+await page.getByRole('button',{name:'Start this record'}).click();
+await page.waitForFunction(()=>document.querySelectorAll('.queue-row').length>5,null,{timeout:30000});
+const rows=await page.locator('.queue-row').count();
+await page.waitForFunction(()=>document.querySelector('.play-button')?.getAttribute('aria-label')==='Pause',null,{timeout:30000}).catch(()=>{});
+const iframe=await page.locator('#youtube-host iframe').getAttribute('src');
+const first=await page.locator('.queue-row.current .queue-text strong').textContent();
+await page.waitForTimeout(1500);
+const titled=await page.locator('.queue-row.current .queue-text strong').textContent();
+await page.getByRole('button',{name:'Next',exact:true}).first().click();
+await page.waitForTimeout(4000);
+const second=await page.locator('.queue-row.current .queue-text strong').textContent();
+const idx=await page.evaluate(()=>[...document.querySelectorAll('.queue-row')].findIndex(r=>r.classList.contains('current')));
+const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('vinyl.queue.v1')||'{}'));
+console.log(JSON.stringify({rows,iframeIsEmbed:/youtube\.com\/embed/.test(iframe||''),usesListParam:/[?&]list=/.test(iframe||''),first,titled,second,currentIndex:idx,player:await page.locator('.play-button').getAttribute('aria-label'),savedQueue:saved.queue?.length,savedIndex:saved.index}));
+await page.screenshot({path:'qa/youtube-queue.png'});
+await page.reload();await page.waitForTimeout(2000);
+console.log('after reload',JSON.stringify({rows:await page.locator('.queue-row').count(),current:await page.evaluate(()=>[...document.querySelectorAll('.queue-row')].findIndex(r=>r.classList.contains('current')))}));
+console.log('PAGE_ERRORS',JSON.stringify(errors));await browser.close();

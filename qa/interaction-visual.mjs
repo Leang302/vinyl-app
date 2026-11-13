@@ -1,0 +1,4 @@
+import { chromium } from '@playwright/test';
+const b=await chromium.launch({channel:'chrome',headless:true});const p=await b.newPage({viewport:{width:1440,height:1000}});p.on('pageerror',e=>console.log('ERROR',e.message));
+await p.goto('http://127.0.0.1:5180');await p.waitForTimeout(2500);await p.screenshot({path:'qa/interaction-desktop.png',fullPage:true});console.log('Desktop',await p.evaluate(()=>({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,canvas:document.querySelector('canvas').getBoundingClientRect().toJSON()})));
+await p.setViewportSize({width:390,height:844});await p.waitForTimeout(700);await p.screenshot({path:'qa/interaction-mobile.png',fullPage:true});console.log('Mobile overflow',await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));await b.close();

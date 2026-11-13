@@ -1,0 +1,32 @@
+import { chromium, expect } from '@playwright/test';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({channel:'chrome',headless:true});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+try{
+ await page.goto('http://127.0.0.1:5180');await page.waitForTimeout(1800);
+ const progress=page.getByRole('slider',{name:'Playback position',exact:true});const marker=page.locator('[data-control=record]');await expect(marker).toBeVisible();
+ const record=await marker.boundingBox();const cx=record.x+record.width/2,cy=record.y+record.height/2;
+ await page.mouse.click(cx,cy);await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();await page.waitForTimeout(700);
+ console.log('Tapping the physical record starts real playback.');
+ await page.evaluate(async()=>{const {playback}=await import(performance.getEntriesByType('resource').find(r=>r.name.includes('/src/audio/PlaybackController.ts')).name);playback.seek(20);});await page.waitForTimeout(150);
+ const before=Number(await progress.getAttribute('aria-valuenow'));
+ await page.mouse.move(cx,cy);await page.mouse.down();await page.mouse.move(cx-100,cy-35,{steps:18});await page.waitForTimeout(100);
+ console.log('Scrub preview',await page.locator('.interaction-feedback').innerText());await page.mouse.up();await page.waitForTimeout(500);
+ const after=Number(await progress.getAttribute('aria-valuenow'));console.log('Record scrub',before,after);assert.ok(Math.abs(after-before)>1);
+ const afterMarker=await marker.boundingBox();assert.ok(Math.abs(afterMarker.x-record.x)<2);console.log('Record drag does not orbit the camera.');
+ const knob=await page.locator('[data-control=volume]').boundingBox();const vol=page.getByRole('slider',{name:'Master volume'});const oldVol=Number(await vol.getAttribute('aria-valuenow'));
+ await page.mouse.move(knob.x+knob.width/2,knob.y+knob.height/2);await page.mouse.down();await page.mouse.move(knob.x+knob.width/2,knob.y+knob.height/2-35,{steps:12});await page.mouse.up();const newVol=Number(await vol.getAttribute('aria-valuenow'));console.log('Physical volume knob',oldVol,newVol);assert.ok(newVol>oldVol);
+ await page.evaluate(async()=>{const {playback}=await import(performance.getEntriesByType('resource').find(r=>r.name.includes('/src/audio/PlaybackController.ts')).name);playback.seek(10);});await page.waitForTimeout(150);
+ const arm=await page.locator('[data-control=tonearm]').boundingBox();const needleBefore=Number(await progress.getAttribute('aria-valuenow'));await page.mouse.move(arm.x+arm.width/2,arm.y+arm.height/2);await page.mouse.down();await page.mouse.move(arm.x+arm.width/2-35,arm.y+arm.height/2,{steps:14});console.log('Physical needle preview',await page.locator('.interaction-feedback').innerText());await page.mouse.up();await page.waitForTimeout(250);const needleAfter=Number(await progress.getAttribute('aria-valuenow'));console.log('Physical tonearm seek',needleBefore,needleAfter);assert.ok(needleAfter>needleBefore+5);
+ await page.getByRole('button',{name:'Lift needle',exact:true}).click();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();await page.getByRole('button',{name:'Drop needle',exact:true}).click();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();console.log('Needle lift pauses and drop resumes.');
+ const brake=await page.getByRole('button',{name:'Hold brake'}).boundingBox();await page.mouse.move(brake.x+brake.width/2,brake.y+brake.height/2);await page.mouse.down();await expect(page.getByRole('button',{name:'Play',exact:true})).toBeVisible();await page.mouse.up();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();console.log('Hold brake pauses and release resumes.');
+ await page.getByRole('button',{name:'Close cover',exact:true}).click();await expect(page.getByRole('button',{name:'Open cover',exact:true})).toBeVisible();await page.waitForTimeout(500);await page.getByRole('button',{name:'Open cover',exact:true}).click();console.log('Dust cover opens and closes.');
+ await page.getByRole('button',{name:'Toggle sound settings'}).click();await expect(page.getByRole('tab',{name:'Sound & EQ'})).toBeVisible();await page.getByRole('button',{name:'Toggle sound settings'}).click();await expect(page.getByRole('tab',{name:'Sound & EQ'})).toBeHidden();
+ await page.getByRole('combobox',{name:'Camera view'}).selectOption('overhead');await page.getByRole('button',{name:'Move camera',exact:true}).click();await expect(page.locator('[data-control=record]')).toBeHidden();await page.getByRole('button',{name:'Hands on',exact:true}).click();await expect(page.locator('[data-control=record]')).toBeVisible();
+ console.log('Sound panel, camera presets, and interaction-mode switching work.');
+ await page.screenshot({path:'qa/physical-desktop.png',fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);console.log('No desktop horizontal overflow.');
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Reset camera'}).click();await page.waitForTimeout(500);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await expect(vol).toBeVisible();await page.screenshot({path:'qa/physical-mobile.png',fullPage:true});
+ await page.getByRole('button',{name:'Open collection',exact:true}).click();await expect(page.getByRole('button',{name:'Close collection',exact:true})).toBeVisible();await page.getByRole('button',{name:'Close collection',exact:true}).click();console.log('Mobile volume, collection drawer, and responsive layout work.');
+ console.log('PAGE_ERRORS',errors);assert.deepEqual(errors,[]);
+}finally{await browser.close();}

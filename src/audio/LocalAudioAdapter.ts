@@ -36,12 +36,14 @@ export class LocalAudioAdapter implements PlaybackAdapter {
     return {audio,gain,source,track,objectUrl};
   }
   private release(deck?:Deck){if(!deck)return;deck.audio.pause();deck.audio.removeAttribute('src');deck.audio.load();deck.source.disconnect();deck.gain.disconnect();if(deck.objectUrl)URL.revokeObjectURL(deck.objectUrl);}
-  async load(track:Track){
+  async load(track:Track,startAt=0){
     const generation=++this.generation;this.stopTimer();this.release(this.current);this.release(this.incoming);this.current=undefined;this.incoming=undefined;this.crossLoading=false;this.crossElapsed=0;this.endedHandled=false;this.phase='idle';
     this.listener({state:'loading',position:0,duration:0,trackId:track.id});
     try{await this.init();if(generation!==this.generation)return;const deck=await this.makeDeck(track);if(generation!==this.generation){this.release(deck);return;}this.current=deck;deck.gain.gain.value=1;
       deck.audio.onerror=()=>{if(this.current===deck)this.fail('This audio file could not be played. Try a browser-supported MP3, WAV, M4A, OGG, or FLAC file.');};
-      deck.audio.onended=()=>this.handleEnded(deck);await deck.audio.play();if(generation!==this.generation)return;this.paused=false;this.applySettings();this.startTimer();this.emit('playing');
+      deck.audio.onended=()=>this.handleEnded(deck);
+      if(startAt>0){await new Promise<void>(done=>{if(deck.audio.readyState>=1)done();else{deck.audio.addEventListener('loadedmetadata',()=>done(),{once:true});deck.audio.addEventListener('error',()=>done(),{once:true});}});if(generation!==this.generation)return;if(Number.isFinite(deck.audio.duration)&&startAt<deck.audio.duration-1)deck.audio.currentTime=startAt;}
+      await deck.audio.play();if(generation!==this.generation)return;this.paused=false;this.applySettings();this.startTimer();this.emit('playing');
     }catch(error){if(generation===this.generation)this.fail(error instanceof Error?error.message:'Playback could not begin. Press Play to try again.');}
   }
   private handleEnded(deck:Deck){if(this.current!==deck||this.endedHandled||this.incoming)return;this.endedHandled=true;this.stopTimer();this.emit('ended');this.onEnded();}
@@ -66,7 +68,7 @@ export class LocalAudioAdapter implements PlaybackAdapter {
     this.emit('playing');
   }
   private commitIncoming(){if(!this.incoming)return;const old=this.current;this.current=this.incoming;this.incoming=undefined;this.current.gain.gain.setTargetAtTime(1,this.ctx!.currentTime,0.015);this.current.audio.onended=()=>this.handleEnded(this.current!);this.current.audio.onerror=()=>this.fail('The next local audio file could not be played.');this.release(old);this.crossElapsed=0;this.phase='idle';this.endedHandled=false;this.onAdvance(this.current.track);}
-  private emit(state:Snapshot['state']){const a=this.current?.audio;this.listener({state,position:a?.currentTime||0,duration:Number.isFinite(a?.duration)?a!.duration:0,trackId:this.current?.track.id||''});}
+  private emit(state:Snapshot['state']){const a=this.current?.audio;const duration=a&&Number.isFinite(a.duration)?a.duration:0;const buffered=a&&duration&&a.buffered.length?a.buffered.end(a.buffered.length-1)/duration:0;this.listener({state,position:a?.currentTime||0,duration,trackId:this.current?.track.id||'',buffered});}
   private fail(error:string){this.paused=true;this.stopTimer();this.listener({state:'error',position:0,duration:0,trackId:this.current?.track.id||'',error});}
   async play(){if(!this.current)return;try{await this.init();await this.current.audio.play();if(this.incoming)await this.incoming.audio.play();this.paused=false;this.applySettings();this.last=performance.now();this.startTimer();this.emit('playing');}catch{this.fail('Playback was blocked. Press Play again to start audio.');}}
   pause(){this.paused=true;this.current?.audio.pause();this.incoming?.audio.pause();this.stopTimer();if(this.crackleGain)this.crackleGain.gain.value=0;this.emit('paused');}

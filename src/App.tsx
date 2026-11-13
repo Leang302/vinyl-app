@@ -1,39 +1,105 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { ArrowDown, ArrowUpRight, Disc3, Headphones, Heart, Info, LoaderCircle, Menu, Music2, Settings2, X } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Disc3, LoaderCircle, Menu as MenuIcon, Plus } from 'lucide-react';
 import { usePlayer } from './state/store';
 import { playback } from './audio/PlaybackController';
 import { PlaylistSidebar } from './components/PlaylistSidebar';
-import { SettingsPanel, AppearanceSettings } from './components/SettingsPanel';
+import { SettingsDialog, type SettingsTab } from './components/SettingsPanel';
 import { PlaybackControls } from './components/PlaybackControls';
-import { AddMusicDialog } from './components/AddMusicDialog';
-import { Dialog, Tooltip, TooltipProvider } from './components/ui/controls';
-import { formatTime } from './lib/utils';
+import { StageToolbar, TransportRow, FirstRunHint, SHORTCUTS } from './components/TurntableWorkbench';
+import { resetCamera, setCameraView, toggleCover, toggleNeedle } from './interaction/transport';
+import { AddMusicDialog, type AddTab } from './components/AddMusicDialog';
+import { QueuePanel } from './components/QueuePanel';
+import { MediaDock } from './components/MediaDock';
+import { HeaderMenu, type MenuAction } from './components/HeaderMenu';
+import { Toast } from './components/Toast';
+import { Dialog, IconButton, TooltipProvider } from './components/ui/controls';
+import { Button } from '@/components/ui/button';
 const TurntableScene=lazy(()=>import('./scene/TurntableScene'));
+
+
 export default function App(){
- const [addOpen,setAddOpen]=useState(false);const [settingsOpen,setSettingsOpen]=useState(false);const [aboutOpen,setAboutOpen]=useState(false);const [libraryOpen,setLibraryOpen]=useState(false);const [queueOpen,setQueueOpen]=useState(false);
- const {track,state,queue,index,collections,error,phase,favorites,settings,hydrated}=usePlayer();
- const collection=collections.find(c=>c.id===track?.collectionId);const playing=state==='playing';
- useEffect(()=>{void usePlayer.getState().hydrate();playback.start();return()=>playback.dispose();},[]);
- useEffect(()=>{const onKey=(e:KeyboardEvent)=>{if(e.target instanceof HTMLElement&&(e.target.closest('input,textarea,select,[role="slider"],[role="dialog"],button,a')||e.target.isContentEditable))return;if(e.code==='Space'){e.preventDefault();void playback.toggle();}if(e.code==='ArrowRight'&&e.altKey)void playback.next();if(e.code==='ArrowLeft'&&e.altKey)void playback.previous();};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[]);
- return <TooltipProvider delayDuration={350}><div className="app-shell">
- <header className="app-header"><a className="brand" href="#" onClick={e=>{e.preventDefault();setLibraryOpen(false);}} aria-label="VINYL listening room"><span className="brand-disc"><i/></span>VINYL<span className="brand-period">®</span></a><div className="header-divider"/><span className="brand-tagline">A different kind of listening.</span><nav className="header-nav" aria-label="Main navigation"><button className={!libraryOpen?'active':''} onClick={()=>setLibraryOpen(false)}>Listening room</button><button className={libraryOpen?'active':''} onClick={()=>{setLibraryOpen(x=>!x);document.querySelector('.library-panel')?.scrollIntoView({behavior:'smooth',block:'nearest'});}}>My collection <span>{collections.length}</span></button></nav><div className="header-right"><span className="session-label"><i/> YOUR SPACE, YOUR SOUND</span><Tooltip label="About VINYL"><button className="icon-button" onClick={()=>setAboutOpen(true)} aria-label="About VINYL"><Info size={17}/></button></Tooltip><Tooltip label="Turntable settings"><button className="icon-button" onClick={()=>setSettingsOpen(true)} aria-label="Open turntable settings"><Settings2 size={18}/></button></Tooltip><button className="icon-button mobile-menu" aria-label="Open collection" onClick={()=>setLibraryOpen(true)}><Menu size={21}/></button></div></header>
- <main className="listening-room">
- <PlaylistSidebar onAdd={()=>setAddOpen(true)} mobileOpen={libraryOpen} onClose={()=>setLibraryOpen(false)}/>
- {libraryOpen&&<button className="library-backdrop" aria-label="Close music collection" onClick={()=>setLibraryOpen(false)}/>}
- <section className="turntable-room" aria-label="Interactive turntable"><div className="room-intro"><div><span className="eyebrow"><span className="tiny-spark">✳</span> SLOW DOWN. TUNE IN.</span><h1>A little closer<br/>to the music<span>.</span></h1><p>No rush. No noise. Just your next favorite moment.</p></div><span className="room-edition">THE LISTENING ROOM<br/><strong>VOL. 001</strong></span></div>
- <div className="scene-section"><div className="equipment-label"><span className="status-dot"/> VINYL MODEL 01 <span>DIRECT DRIVE TURNTABLE</span></div><Suspense fallback={<div className="scene-loading"><Disc3 className="spinning" size={28}/>Setting the needle…</div>}><TurntableScene/></Suspense>{(state==='loading'||state==='buffering')&&<div className="transition-veil" role="status"><span/><span/><span/><small>{state==='buffering'?'Waiting for the music':'Setting the needle'}</small></div>}<div className="scene-badges"><button onClick={()=>usePlayer.getState().setSettings({rpm:settings.rpm===33?45:33})} aria-label="Change platter speed"><span className="tiny-led"/>{settings.rpm===33?'33⅓':'45'} <small>RPM</small></button><span><Headphones size={13}/> MADE FOR LISTENING</span></div></div>
- <div className="now-playing"><div className="now-playing-eyebrow"><span className={`status-dot ${playing?'on':''}`}/>{state==='ended'?'A GOOD MOMENT. PLAY IT AGAIN.':phase==='out'?'FADING INTO THE NEXT MOMENT':phase==='in'||phase==='crossfading'?'A NEW MOMENT, EASING IN':phase==='waiting'||state==='loading'||state==='buffering'?'SETTING THE NEEDLE':playing?'ON THE TURNTABLE':'READY WHEN YOU ARE'}</div><div className="now-playing-title"><h2>{track?.title||'Your next favorite moment'}</h2>{track&&<button className={`icon-button ${favorites.includes(track.id)?'saved':''}`} aria-label="Save track to favorites" aria-pressed={favorites.includes(track.id)} onClick={()=>usePlayer.getState().toggleFavorite(track.id)}><Heart size={19}/></button>}</div><p>{track?.artist||'Add some music to begin'}<span>·</span>{collection?.title||'Your personal listening room'}</p></div>
- <div className="queue-section"><div className="queue-heading"><span className="eyebrow">UP NEXT <span className="muted-count">{Math.max(0,queue.length-index-1).toString().padStart(2,'0')}</span></span><button className="text-button" onClick={()=>setQueueOpen(true)}>View queue <ArrowUpRight size={12}/></button></div><div className="up-next-list">{queue.slice(index+1,index+3).map((t,i)=><button className="up-next-track" key={t.id} onClick={()=>void playback.selectTrack(t)}><span className="track-number">{String(i+1).padStart(2,'0')}</span><img src={t.artwork} alt=""/><span><strong>{t.title}</strong><small>{t.artist}</small></span><span className="next-duration">{t.duration?formatTime(t.duration):t.source==='local'&&t.url?'0:48':<Music2 size={14}/>}</span></button>)}{index+1>=queue.length&&<button className="queue-empty" onClick={()=>setAddOpen(true)}><Disc3 size={17}/><span>There’s always another good record.</span><span>Add music <ArrowUpRight size={13}/></span></button>}</div></div>
- <div className="room-footer"><span>ANALOG SOUL. DIGITAL POSSIBILITIES.</span><span>EST. 2026 <span className="tiny-spark">✳</span></span></div>
- </section>
- <SettingsPanel onAdd={()=>setAddOpen(true)}/>
- </main><PlaybackControls onQueue={()=>setQueueOpen(true)}/>
- <AnimatePresence>{error&&<motion.div initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="error-toast" role="alert"><Info size={18}/><span>{error}</span><button className="icon-button" aria-label="Dismiss playback message" onClick={()=>usePlayer.getState().patch({error:null})}><X size={16}/></button></motion.div>}</AnimatePresence>
- <AddMusicDialog open={addOpen} onOpenChange={setAddOpen}/>
- <Dialog open={settingsOpen} onOpenChange={setSettingsOpen} title="Made for your kind of listening." description="Choose the details that make this room yours."><AppearanceSettings/></Dialog>
- <Dialog open={queueOpen} onOpenChange={setQueueOpen} title="On the record." description={`${queue.length} ${queue.length===1?'track':'tracks'} in your current listening queue.`}><div className="full-queue">{queue.map((t,i)=><button className={i===index?'active':''} key={t.id} onClick={()=>{void playback.selectTrack(t);setQueueOpen(false);}}><span>{i===index&&playing?<Music2 size={15}/>:String(i+1).padStart(2,'0')}</span><img src={t.artwork} alt=""/><span><strong>{t.title}</strong><small>{t.artist}</small></span>{i===index&&<small>ON THE TURNTABLE</small>}</button>)}{!queue.length&&<p>Add a playlist or local files to fill your queue.</p>}</div></Dialog>
- <Dialog open={aboutOpen} onOpenChange={setAboutOpen} title="Good music deserves a moment." description="VINYL is your personal listening room, bringing the ritual of records to the music you love."><div className="about-content"><Disc3 size={40}/><p>Start with the original VINYL Sessions, bring your own audio files, or save a YouTube playlist. Grab a record and drag it onto the turntable.</p><p>Local audio gets a real spectrum, three-band EQ, stereo balance, optional crackle, and equal-power crossfades. YouTube uses its visible official player with gentle sequential fades.</p><p>Your library and settings stay in this browser. Included artwork and ambient compositions were created for VINYL.</p><div className="keyboard-hints"><kbd>Space</kbd> Play / pause <kbd>Alt + →</kbd> Next track</div><a href="https://developers.google.com/youtube/iframe_api_reference" target="_blank" rel="noreferrer">Built with the official YouTube player <ArrowUpRight size={13}/></a><button className="primary-button" onClick={()=>{setAboutOpen(false);setAddOpen(true);}}>Bring your music <ArrowDown size={16}/></button></div></Dialog>
- {!hydrated&&<div className="hydration-indicator"><LoaderCircle className="spinning" size={13}/> Opening your record shelf</div>}
+ const [addOpen,setAddOpen]=useState(false);const [addTab,setAddTab]=useState<AddTab>('youtube');
+ const [settingsOpen,setSettingsOpen]=useState(false);const [settingsTab,setSettingsTab]=useState<SettingsTab>('sound');
+ const [aboutOpen,setAboutOpen]=useState(false);
+ const [libraryOpen,setLibraryOpen]=useState(false);
+ const [queueOpen,setQueueOpen]=useState(false);
+ const [fullscreen,setFullscreen]=useState(false);
+ const searchRef=useRef<HTMLInputElement>(null);
+ const hydrated=usePlayer(s=>s.hydrated);const state=usePlayer(s=>s.state);const collectionCount=usePlayer(s=>s.collections.length);const mode=usePlayer(s=>s.mode);
+ const canFullscreen=typeof document!=='undefined'&&!!document.fullscreenEnabled;
+ useEffect(()=>{playback.start();void usePlayer.getState().hydrate();return()=>playback.dispose();},[]);
+ useEffect(()=>{const on=()=>setFullscreen(!!document.fullscreenElement);document.addEventListener('fullscreenchange',on);return()=>document.removeEventListener('fullscreenchange',on);},[]);
+ const toggleFullscreen=()=>{if(document.fullscreenElement)void document.exitFullscreen();else void document.documentElement.requestFullscreen().catch(()=>usePlayer.getState().notify('Fullscreen is not available here.'));};
+ const focusSearch=useCallback(()=>{if(window.matchMedia('(max-width: 699px)').matches)setLibraryOpen(true);requestAnimationFrame(()=>searchRef.current?.focus());},[]);
+ // Global shortcuts. Ignored while typing, inside dialogs/menus, and for keys the focused control already uses.
+ useEffect(()=>{const onKey=(e:KeyboardEvent)=>{
+  if(e.defaultPrevented||e.metaKey||e.ctrlKey||e.altKey)return;
+  const t=e.target instanceof HTMLElement?e.target:null;
+  if(t?.closest('input,textarea,select,[contenteditable=true]'))return;
+  if(t?.closest('[role=dialog],[role=menu]'))return;
+  if(e.key==='/'){e.preventDefault();focusSearch();return;}
+  if(e.key.startsWith('Arrow')&&t?.closest('[role=slider],[role=tablist]'))return;
+  if(e.key===' '&&t?.closest('button,a,[role=slider],[role=tab]'))return;
+  const s=usePlayer.getState();
+  switch(e.key.toLowerCase()){
+   case ' ':e.preventDefault();void playback.toggle();break;
+   case 'arrowleft':e.preventDefault();playback.seekBy(-5);break;
+   case 'arrowright':e.preventDefault();playback.seekBy(5);break;
+   case 'j':playback.seekBy(-10);break;
+   case 'l':toggleNeedle();break;
+   case 'c':toggleCover();break;
+   case '1':setCameraView('room');break;
+   case '2':setCameraView('overhead');break;
+   case '3':setCameraView('detail');break;
+   case 'r':resetCamera();break;
+   case 'f':if(canFullscreen)toggleFullscreen();break;
+   case 'n':void playback.next();break;
+   case 'p':void playback.previous();break;
+   case 'm':s.toggleMute();break;
+  }
+ };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[focusSearch]);
+ const openAdd=(tab:AddTab='youtube')=>{setAddTab(tab);setAddOpen(true);};
+ const onMenu=(action:MenuAction)=>{if(action==='about'){setAboutOpen(true);return;}setSettingsTab(action==='sound'?'sound':'turntable');setSettingsOpen(true);};
+ const drawer=libraryOpen||queueOpen;
+ return <TooltipProvider delayDuration={400}><div className={`app-shell ${fullscreen?'focus-room':''} ${queueOpen?'queue-open':''}`} data-source={mode}>
+  <header className="app-header">
+   <IconButton label="Open collection" className="mobile-only" onClick={()=>setLibraryOpen(true)}><MenuIcon size={20}/></IconButton>
+   <a className="brand" href="#" onClick={e=>e.preventDefault()} aria-label="VINYL"><span className="brand-disc" aria-hidden="true"><i/></span>VINYL</a>
+   <nav className="header-tabs" aria-label="Main">
+    <button type="button" aria-current={!libraryOpen||undefined} onClick={()=>setLibraryOpen(false)}>Listening room</button>
+    <button type="button" aria-current={libraryOpen||undefined} onClick={focusSearch}>My collection <span className="count">{collectionCount}</span></button>
+   </nav>
+   <div className="header-actions">
+    <Button className="add-music" aria-label="Add music" onClick={()=>openAdd()}><Plus size={16}/><span className="label">Add music</span></Button>
+    <HeaderMenu onSelect={onMenu}/>
+   </div>
+  </header>
+  <main className="listening-room">
+   <PlaylistSidebar onAdd={()=>openAdd()} mobileOpen={libraryOpen} onClose={()=>setLibraryOpen(false)} searchRef={searchRef}/>
+   <section className="stage" aria-label="Turntable">
+    <div className="stage-canvas">
+     <Suspense fallback={<div className="scene-loading"><Disc3 className="spinning" size={28}/>Setting up the turntable…</div>}><TurntableScene/></Suspense>
+     <StageToolbar fullscreen={fullscreen} onFullscreen={toggleFullscreen} canFullscreen={canFullscreen}/>
+     <FirstRunHint/>
+     {(state==='loading'||state==='buffering')&&<div className="stage-status" role="status"><LoaderCircle className="spinning" size={14}/>{state==='buffering'?'Buffering…':'Setting the needle…'}</div>}
+    </div>
+    <div className="transport-dock"><TransportRow/></div>
+    {/* Reserved lane: toasts and gesture feedback live here so they never cover controls. */}
+    <div className="status-lane"><Toast/></div>
+   </section>
+   <MediaDock/>
+   <QueuePanel onAdd={()=>openAdd()} onClose={()=>setQueueOpen(false)}/>
+   {drawer&&<button type="button" className="drawer-backdrop" aria-label="Close panel" tabIndex={-1} onClick={()=>{setLibraryOpen(false);setQueueOpen(false);}}/>}
+  </main>
+  <PlaybackControls onQueue={()=>setQueueOpen(x=>!x)} queueOpen={queueOpen}/>
+  <AddMusicDialog open={addOpen} onOpenChange={setAddOpen} tab={addTab} onTabChange={setAddTab}/>
+  <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} tab={settingsTab} onTabChange={setSettingsTab}/>
+  <Dialog open={aboutOpen} onOpenChange={setAboutOpen} title="About VINYL" description="A listening room for your own files and YouTube.">
+   <div className="stack">
+    <p className="hint">Local files stay in this browser. YouTube plays in its official player; videos whose owners disable embedding are skipped, or marked if you picked them yourself.</p>
+    <dl className="shortcuts">{SHORTCUTS.map(([k,v])=><div key={k}><dt><kbd>{k}</kbd></dt><dd>{v}</dd></div>)}</dl>
+   </div>
+  </Dialog>
+  {!hydrated&&<div className="hydration-indicator" role="status"><LoaderCircle className="spinning" size={14}/>Opening your shelf…</div>}
  </div></TooltipProvider>;
 }

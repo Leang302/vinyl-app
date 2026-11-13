@@ -1,0 +1,67 @@
+/* VINYL design tokens. The only file allowed to contain raw colors.
+   Contrast (measured): --text-3 on --surface-3 4.9:1, --text-2 on --surface-3 7.0:1,
+   --primary-foreground on --primary 11.5:1, --text on --surface-1 15.9:1.
+   The sage accent is called --primary (shadcn's name for it); in shadcn, --accent
+   means the hover surface, so it maps to --surface-3 below. */
+:root{
+  color-scheme:dark;
+  /* Elevation: each step is lighter than the last */
+  --bg:#0E0F0D;
+  --surface-1:#151714;
+  --surface-2:#1C1F1B;
+  --surface-3:#252923;
+  --surface-1-glass:rgba(21,23,20,0.8);
+  --border:rgba(255,255,255,0.08);
+  --border-strong:rgba(255,255,255,0.16);
+
+  /* Text. --text-3 is #96948B rather than #8A887F so hints keep 4.5:1 on --surface-3 too. */
+  --text:#F1EFE8;
+  --text-2:#B4B2A8;
+  --text-3:#96948B;
+
+  /* The only accent */
+  --primary:#C9DDB0;
+  --primary-hover:#D7E7C3;
+  --primary-foreground:#1A2014;
+  --primary-soft:rgba(201,221,176,0.14);
+  --danger:#E5756B;
+  --warning:#E0B25A;
+  --warning-soft:rgba(224,178,90,0.14);
+
+  /* Overlays and shadows */
+  --scrim:rgba(6,7,6,0.72);
+  --shade:rgba(0,0,0,0.55);
+  --shadow-1:0 4px 12px rgba(0,0,0,0.35);
+  --shadow-2:0 12px 32px rgba(0,0,0,0.5);
+  --mask:#000;
+
+  /* Shape, space, type, motion */
+  --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:999px;
+  --s-1:4px;--s-2:8px;--s-3:12px;--s-4:16px;--s-5:24px;
+  --font:'DM Sans',system-ui,-apple-system,sans-serif;
+  --fs-12:12px;--fs-14:14px;--fs-16:16px;--fs-20:20px;
+  --fw-regular:400;--fw-medium:500;--fw-semibold:600;
+  --t:150ms ease-out;
+
+  /* Layout */
+  --header-h:64px;--player-h:88px;--sidebar-w:272px;--panel-w:360px;
+
+  /* shadcn/ui semantic names → VINYL tokens (no new colors) */
+  --background:var(--bg);
+  --foreground:var(--text);
+  --card:var(--surface-1);
+  --card-foreground:var(--text);
+  --popover:var(--surface-2);
+  --popover-foreground:var(--text);
+  --secondary:var(--surface-3);
+  --secondary-foreground:var(--text);
+  --muted:var(--surface-2);
+  --muted-foreground:var(--text-2);
+  --accent:var(--surface-3);
+  --accent-foreground:var(--text);
+  --destructive:var(--danger);
+  --destructive-foreground:var(--bg);
+  --input:var(--border);
+  --ring:var(--primary);
+  --radius:8px;
+}

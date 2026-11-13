@@ -6,3 +6,4 @@ playwright-report
 *.local
 *.tsbuildinfo
 qa/audio-debug.mjs
+qa/*.png
